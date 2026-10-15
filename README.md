@@ -14,9 +14,11 @@ pi-ultracode supplies the multi-agent engine: `agent()`, `parallel()`, `pipeline
 ## Install
 
 ```bash
-pi install npm:pi-ultracode            # the workflow engine (required for /uc-* workflows)
-pi install /path/to/pi-ultracode-verify  # or: pi install git:github.com/<owner>/pi-ultracode-verify
+pi install npm:pi-ultracode          # the workflow engine (required for /uc-* workflows)
+pi install npm:pi-ultracode-verify   # this package
 ```
+
+Update later with `pi update npm:pi-ultracode-verify` (or `pi update --extensions`).
 
 Restart Pi (or `/reload`). On session start, the roles and workflows are copied into
 `~/.pi/ultracode/{agents,workflows}`, where pi-ultracode discovers them.
@@ -105,6 +107,10 @@ overwritten. You can also add your own `.md` roles and `.workflow.js` files ther
 ## Development
 
 ```bash
+npm install
+pi -e .           # try the local checkout without installing
+npm run typecheck
+npm run lint
 npm test   # unit tests (detection, config, runner, sync, workflow invariants)
            # + validates every workflow with pi-ultracode's own parser
 ```
@@ -112,6 +118,9 @@ npm test   # unit tests (detection, config, runner, sync, workflow invariants)
 Workflow-script rule of thumb (enforced by pi-ultracode's static checks): call `agent()` / `parallel()` / `pipeline()`
 directly, and use helper functions only to build prompts and options. Don't wrap `agent()` in async helpers, and don't
 push orchestration thunks into arrays.
+
+Releases use [release-please](https://github.com/googleapis/release-please): write conventional commits
+(`feat:`, `fix:`, `feat!:`). Merging the generated release PR tags a release and publishes to npm from CI.
 
 ## License
 

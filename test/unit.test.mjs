@@ -1,23 +1,14 @@
 // Unit tests for detection, config, runner, and asset sync. Run: npm test
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
+
+import { makeJiti } from "./env.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const ext = join(here, "..", "extensions", "ucv");
-const releases = join(homedir(), ".pi/agent/install/releases");
-const nm =
-  process.env.PI_NODE_MODULES ||
-  join(releases, readdirSync(releases).filter((v) => existsSync(join(releases, v, "node_modules/jiti"))).sort().reverse()[0], "node_modules");
-const { createJiti } = await import(pathToFileURL(join(nm, "jiti/lib/jiti.mjs")).href);
-const jiti = createJiti(import.meta.url, {
-  alias: {
-    "@earendil-works/pi-coding-agent": join(nm, "@earendil-works/pi-coding-agent"),
-    "@earendil-works/pi-tui": join(nm, "@earendil-works/pi-tui"),
-    typebox: join(nm, "typebox/build/index.mjs"),
-  },
-});
+const jiti = await makeJiti(import.meta.url);
 const { probeProject } = await jiti.import(join(ext, "probe.ts"));
 const { resolveChecks, checksToMap } = await jiti.import(join(ext, "config.ts"));
 const { runCommand, formatResults } = await jiti.import(join(ext, "runner.ts"));
@@ -28,7 +19,9 @@ let fail = 0;
 function eq(name, got, want) {
   const norm = (v) => (v && typeof v === "object" && !Array.isArray(v) ? sortKeys(v) : v);
   const ok = JSON.stringify(norm(got)) === JSON.stringify(norm(want));
-  console.log(`${ok ? "PASS" : "FAIL"}  ${name}${ok ? "" : `\n      got:  ${JSON.stringify(got)}\n      want: ${JSON.stringify(want)}`}`);
+  console.log(
+    `${ok ? "PASS" : "FAIL"}  ${name}${ok ? "" : `\n      got:  ${JSON.stringify(got)}\n      want: ${JSON.stringify(want)}`}`,
+  );
   ok ? pass++ : fail++;
 }
 const tmp = mkdtempSync(join(tmpdir(), "ucv-test-"));
@@ -41,16 +34,22 @@ function fixture(name, files) {
   mkdirSync(dir, { recursive: true });
   return dir;
 }
-const sortKeys = (o) => Object.fromEntries(Object.entries(o).sort(([a], [b]) => a.localeCompare(b)));
-const cmds = (r) => sortKeys(Object.fromEntries(Object.entries(r.checks).map(([k, v]) => [k, v.command])));
+const sortKeys = (o) =>
+  Object.fromEntries(Object.entries(o).sort(([a], [b]) => a.localeCompare(b)));
+const cmds = (r) =>
+  sortKeys(Object.fromEntries(Object.entries(r.checks).map(([k, v]) => [k, v.command])));
 
 // ---------------------------------------------------------------- probe
 {
   const d = fixture("npm-placeholder", {
-    "package.json": JSON.stringify({ scripts: { test: 'echo "Error: no test specified" && exit 1', lint: "eslint ." } }),
+    "package.json": JSON.stringify({
+      scripts: { test: 'echo "Error: no test specified" && exit 1', lint: "eslint ." },
+    }),
     ".git/HEAD": "",
   });
-  eq("npm: placeholder test ignored, lint via npm run", cmds(probeProject(d)), { lint: "npm run lint" });
+  eq("npm: placeholder test ignored, lint via npm run", cmds(probeProject(d)), {
+    lint: "npm run lint",
+  });
 }
 {
   const d = fixture("pnpm-ts", {
@@ -71,8 +70,12 @@ const cmds = (r) => sortKeys(Object.fromEntries(Object.entries(r.checks).map(([k
   });
 }
 {
-  const d = fixture("pm-field", { "package.json": JSON.stringify({ packageManager: "yarn@4.1.0", scripts: { typecheck: "tsc" } }) });
-  eq("packageManager field wins (yarn)", cmds(probeProject(d)), { typecheck: "yarn run typecheck" });
+  const d = fixture("pm-field", {
+    "package.json": JSON.stringify({ packageManager: "yarn@4.1.0", scripts: { typecheck: "tsc" } }),
+  });
+  eq("packageManager field wins (yarn)", cmds(probeProject(d)), {
+    typecheck: "yarn run typecheck",
+  });
 }
 {
   const d = fixture("rust", { "Cargo.toml": "[package]\nname='x'" });
@@ -115,9 +118,13 @@ const cmds = (r) => sortKeys(Object.fromEntries(Object.entries(r.checks).map(([k
   eq("make does not override go test", r.test, "go test ./...");
 }
 {
-  const d = fixture("nested/sub/dir", {});
+  fixture("nested/sub/dir", {});
   writeFileSync(join(tmp, "nested", "Cargo.toml"), "[package]");
-  eq("walks up to project root", probeProject(join(tmp, "nested/sub/dir")).root, join(tmp, "nested"));
+  eq(
+    "walks up to project root",
+    probeProject(join(tmp, "nested/sub/dir")).root,
+    join(tmp, "nested"),
+  );
 }
 {
   const d = fixture("empty", { "notes.txt": "hi" });
@@ -136,8 +143,16 @@ const cmds = (r) => sortKeys(Object.fromEntries(Object.entries(r.checks).map(([k
     }),
   });
   const trusted = resolveChecks(d, true);
-  eq("trusted: override + disable", checksToMap(trusted.checks), { lint: "npm run lint", test: "pnpm vitest run" });
-  eq("trusted: gate config", trusted.gate, { enabled: true, maxAttempts: 1, checks: ["test"], timeoutSeconds: 30 });
+  eq("trusted: override + disable", checksToMap(trusted.checks), {
+    lint: "npm run lint",
+    test: "pnpm vitest run",
+  });
+  eq("trusted: gate config", trusted.gate, {
+    enabled: true,
+    maxAttempts: 1,
+    checks: ["test"],
+    timeoutSeconds: 30,
+  });
   const untrusted = resolveChecks(d, false);
   eq("untrusted: project config ignored", checksToMap(untrusted.checks), {
     lint: "npm run lint",
@@ -159,7 +174,11 @@ const cmds = (r) => sortKeys(Object.fromEntries(Object.entries(r.checks).map(([k
   const slow = await runCommand("t", "sleep 5", tmp, 300);
   eq("runner: timeout kills", [slow.ok, slow.timedOut], [false, true]);
   const long = await runCommand("t", "for i in $(seq 1 500); do echo line$i; done", tmp, 10_000);
-  eq("runner: tail bounded to last lines", [long.tail.split("\n").length <= 80, long.tail.endsWith("line500")], [true, true]);
+  eq(
+    "runner: tail bounded to last lines",
+    [long.tail.split("\n").length <= 80, long.tail.endsWith("line500")],
+    [true, true],
+  );
   eq("formatResults summary", formatResults([ok, bad]).split("\n")[0], "1/2 checks failed.");
 }
 
@@ -177,11 +196,19 @@ const cmds = (r) => sortKeys(Object.fromEntries(Object.entries(r.checks).map(([k
   eq("sync: second run unchanged", [r.written.length, r.updated.length, r.unchanged], [0, 0, 2]);
   writeFileSync(join(assets, "agents", "a.md"), `---\nname: a\n${MANAGED_MARKER}\n---\nv2`);
   r = syncAssets(assets, home);
-  eq("sync: managed file updated", [r.updated.length, readFileSync(join(home, "agents", "a.md"), "utf8").endsWith("v2")], [1, true]);
+  eq(
+    "sync: managed file updated",
+    [r.updated.length, readFileSync(join(home, "agents", "a.md"), "utf8").endsWith("v2")],
+    [1, true],
+  );
   writeFileSync(join(home, "workflows", "w.workflow.js"), "my custom version");
   writeFileSync(join(assets, "workflows", "w.workflow.js"), `// ${MANAGED_MARKER}\nv3`);
   r = syncAssets(assets, home);
-  eq("sync: user-owned file untouched", [r.skippedUserOwned.length, readFileSync(join(home, "workflows", "w.workflow.js"), "utf8")], [1, "my custom version"]);
+  eq(
+    "sync: user-owned file untouched",
+    [r.skippedUserOwned.length, readFileSync(join(home, "workflows", "w.workflow.js"), "utf8")],
+    [1, "my custom version"],
+  );
 }
 
 // ---------------------------------------------------------------- workflow invariants
@@ -190,13 +217,21 @@ const cmds = (r) => sortKeys(Object.fromEntries(Object.entries(r.checks).map(([k
   for (const f of readdirSync(wfDir).filter((f) => f.endsWith(".workflow.js"))) {
     const src = readFileSync(join(wfDir, f), "utf8");
     // Regression: the workflow tool's `args` is untyped and models often send a JSON string.
-    eq(`${f}: tolerates string args`, /const input = parseArgs\(args\);/.test(src) && /JSON\.parse\(a\)/.test(src), true);
+    eq(
+      `${f}: tolerates string args`,
+      /const input = parseArgs\(args\);/.test(src) && /JSON\.parse\(a\)/.test(src),
+      true,
+    );
     eq(`${f}: carries managed marker`, src.includes(MANAGED_MARKER), true);
   }
   const agDir = join(here, "..", "assets", "agents");
   for (const f of readdirSync(agDir).filter((f) => f.endsWith(".md"))) {
     const src = readFileSync(join(agDir, f), "utf8");
-    eq(`${f}: frontmatter name matches file`, (src.match(/^name: (.+)$/m) || [])[1], f.replace(/\.md$/, ""));
+    eq(
+      `${f}: frontmatter name matches file`,
+      (src.match(/^name: (.+)$/m) || [])[1],
+      f.replace(/\.md$/, ""),
+    );
   }
 }
 

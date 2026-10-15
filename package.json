@@ -2,19 +2,62 @@
   "name": "pi-ultracode-verify",
   "version": "0.1.0",
   "description": "Repo-adaptive verification for Pi and pi-ultracode: auto-detected test/lint/typecheck commands, a post-change verify gate with bounded auto-fix, and ready-made multi-agent workflows (feature, migrate, audit, bughunt, review).",
-  "keywords": ["pi-package", "pi-ultracode", "verification", "workflows", "subagents", "testing"],
-  "license": "MIT",
   "type": "module",
+  "license": "MIT",
+  "author": "benclemens",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/benvoluto/pi-ultracode-verify"
+  },
+  "homepage": "https://github.com/benvoluto/pi-ultracode-verify#readme",
+  "bugs": {
+    "url": "https://github.com/benvoluto/pi-ultracode-verify/issues"
+  },
+  "keywords": [
+    "pi-package",
+    "pi",
+    "pi-coding-agent",
+    "pi-ultracode",
+    "verification",
+    "workflows",
+    "subagents",
+    "testing"
+  ],
+  "files": [
+    "extensions",
+    "assets",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE",
+    "!.github"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "test": "node test/unit.test.mjs && node test/validate-workflows.mjs",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "typecheck": "tsc --noEmit"
+  },
   "pi": {
-    "extensions": ["./extensions/ucv/index.ts"]
+    "extensions": [
+      "./extensions/ucv/index.ts"
+    ]
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*",
     "@earendil-works/pi-tui": "*",
     "typebox": "*"
   },
-  "scripts": {
-    "test": "node test/unit.test.mjs && node test/validate-workflows.mjs"
-  },
-  "files": ["extensions", "assets", "README.md", "LICENSE"]
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.15",
+    "@earendil-works/pi-coding-agent": "^1.2.0",
+    "@earendil-works/pi-tui": "^1.2.0",
+    "@types/node": "^26.6.5",
+    "pi-ultracode": "^0.11.0",
+    "typebox": "^1.3.37",
+    "typescript": "^5.9.3"
+  }
 }
